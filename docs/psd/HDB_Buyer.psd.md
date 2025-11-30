@@ -43,12 +43,13 @@
 4.  **Unit Valuation**: User uses "Flat Analysis" to check if a specific floor level or floor area commands a premium.
 5.  **Opportunity Spotting**: Investor uses "Market Insights" to find towns with the highest Year-Over-Year (YoY) appreciation.
 6.  **Deep Dive & Export**: User filters "Data Explorer" for specific blocks/streets, views them on a map, and exports the list to CSV for offline checklist comparison.
+7.  **Shortlist & Compare**: User saves specific blocks to "My Shortlist" and manually adds notes on "Renovation" and "Facing" after viewing units.
 
 ## 4. User Stories
 - "As a **First-Time Buyer**, I want to **filter transactions by price range and town** so that **I can find properties that fit my specific budget (Checklist: Budget)**."
-- "As an **Upgrader**, I want to **compare the price trends of two different towns** so that **I can decide which neighborhood offers better value for my family (Checklist: Location)**."
+- "As an **Upgrader**, I want to **see nearby schools and MRT stations on the map** so that **I can ensure the location is convenient for my family (Checklist: Amenities)**."
 - "As an **Investor**, I want to **see a heatmap of price appreciation** so that **I can identify areas with high investment potential (Checklist: Investment Potential)**."
-- "As a **Buyer**, I want to **see the price difference between low, mid, and high floor units** so that **I can determine if a high-floor unit is worth the premium (Checklist: Unit Positioning)**."
+- "As a **Buyer**, I want to **save interesting blocks to a shortlist and add my own notes (e.g., 'West Sun', 'Newly Renovated')** so that **I can track my viewing history**."
 - "As a **User**, I want to **download the filtered transaction data as a CSV** so that **I can run my own calculations and share with my spouse**."
 - "As a **User**, I want the **interface to feel modern and professional** so that **I trust the data and enjoy using the tool**."
 
@@ -63,22 +64,28 @@
 - **Interactive Map**: Mapbox GL integration in Data Explorer showing exact property locations with price color-coding.
 
 ### P1 - Enhanced Features
+- **Amenities Integration**: Overlay MRT stations, Schools, Malls, and **Carparks** on the map using **OneMap API**.
 - **Flat Analysis Module**: Scatter plots for Price vs. Floor Area, Age vs. Price, and Floor Level analysis.
 - **Market Insights Module**: YoY change analysis, momentum indicators, and seasonal pattern detection.
 
 ### P2 - Future/Checklist Features
-- **Amenities Integration**: Overlay MRT/Schools on the map (Checklist: Nearby Amenities).
-- **Mortgage Calculator**: Integrated estimator based on current interest rates (Checklist: Budget).
+- **My Shortlist & Notes**: Feature to save specific blocks/transactions and manually input "Renovation Status", "Facing", and "Personal Rating".
+- **Comparison View**: Side-by-side comparison of shortlisted units.
 
 ## 6. Functional Requirements
 - **FR-1 (Data Fetching)**: The backend shall fetch data from Data.gov.sg (Dataset: `d_8b84c4ee58e3cfc0ece0d773c8ca6abc`) and cache it in Redis/PostgreSQL.
 - **FR-2 (Smart Refresh)**: The system shall check for new data on launch; if the current month's data is missing, it shall fetch and update the database.
 - **FR-3 (Global Filter)**: The frontend shall provide a "Year" selector (default: current year) that applies to all dashboard sections via global state (Zustand).
 - **FR-4 (Trend Visualization)**: The "Price Trends" section shall display a multi-line chart comparing selected flat types over a 12-24 month period using Recharts.
+- **FR-4.1 (Trend Controls)**: The "Price Trends" section shall include a toggle for **Average vs. Median Price** and a **Time Period Selector** (3/6/12/24 months).
 - **FR-5 (Map Sync)**: The "Data Explorer" map shall update markers dynamically to match the records currently visible in the data table (current page).
 - **FR-6 (Export)**: The system shall allow users to export the currently filtered dataset to a CSV file named `HDB_Resale_Data_[YYYY-MM-DD].csv`.
 - **FR-7 (Filtering)**: The Data Explorer shall support filtering by: Town (multi-select), Flat Type, Price Range (slider), Floor Level (Low/Mid/High), and Remaining Lease.
 - **FR-8 (Metrics)**: The Overview shall display Total Transactions, Average Price, Median Price, and Min/Max Price for the selected period.
+- **FR-9 (Amenities)**: The map shall allow toggling layers for "MRT", "Schools", "Malls", and **"Carparks"** fetched from OneMap API.
+- **FR-10 (Geographic Analysis)**: The section shall include a **Town Ranking Table** and **Transaction Volume Charts** in addition to price comparison.
+- **FR-11 (Flat Analysis)**: The section shall include **Price Distribution Box Plots** to show price spread by flat type.
+- **FR-12 (Market Insights)**: The section shall include a **Seasonal Pattern Chart** to identify buying trends.
 
 ## 7. Non-Functional Requirements
 - **Performance**: Dashboard load time < 2 seconds. API response < 500ms.
@@ -112,9 +119,17 @@
     - `record_count`: Integer
     - `data_version`: String
 
+- **ShortlistItem (Local Storage / Future DB)**
+    - `transaction_id`: UUID (Reference)
+    - `user_notes`: String
+    - `renovation_rating`: Integer (1-5)
+    - `facing`: String (N, S, E, W, etc.)
+    - `added_at`: Timestamp
+
 ## 9. Integrations
 - **Source**: Data.gov.sg HDB Resale Flat Prices API.
-- **Method**: HTTP GET requests to CKAN API via FastAPI backend.
+- **Source**: OneMap API (for MRT, Schools, Amenities locations).
+- **Method**: HTTP GET requests via FastAPI backend.
 - **Rate Limiting**: Handle API rate limits with retry logic; rely on Redis cache primarily.
 
 ## 10. UX & UI Specifications
@@ -127,6 +142,10 @@
     - **Colors**: Professional palette (e.g., Slate/Blue/Teal) using Tailwind colors.
     - **Typography**: Clean sans-serif font (Inter or similar).
     - **Components**: Use shadcn/ui for consistent buttons, inputs, cards, and modals.
+- **Table Formatting**:
+    - **Price Columns**: Right-aligned, formatted as currency (e.g., "S$ 650,000").
+    - **Headers**: Bold text for visual hierarchy.
+    - **Record Count**: "Showing X of Y records" indicator above table.
 - **Interactions**:
     - Smooth transitions between pages.
     - Loading skeletons for data fetching states.
@@ -138,16 +157,19 @@
 - **Assumption**: User has internet access for initial data fetch and map tiles.
 - **Assumption**: Data.gov.sg API structure remains stable.
 
-## 12. Open Questions (Internal Notes)
-- **Q1**: Can we integrate OneMap API later for "Nearby Amenities" (schools, MRT)? (Post-MVP).
-- **Q2**: How do we handle "Renovation Status" or "Facing"? (Data not available in government dataset; requires manual user input or alternative sources).
-- **Q3**: Should we add a "Mortgage Calculator" tab? (Low effort, high value for "Budget" checklist item).
+## 12. Decisions & Open Questions
+- **Decision**: **OneMap API** will be used for amenities data (Schools, MRT).
+- **Decision**: **Manual Input** will be used for "Renovation" and "Facing" via a "My Shortlist" feature, as this data is not available in government datasets.
+- **Decision**: **Mortgage Calculator** is excluded from MVP scope.
+- **Q1**: Can we integrate OneMap API later for "Nearby Amenities" (schools, MRT)? (Post-MVP). -> **Resolved: Yes, moved to P1.**
+- **Q2**: How do we handle "Renovation Status" or "Facing"? -> **Resolved: User Manual Input.**
+- **Q3**: Should we add a "Mortgage Calculator" tab? -> **Resolved: No.**
 
 ## 13. Acceptance Criteria
 - **AC-1**: Application launches and loads data from backend within 2 seconds.
 - **AC-2**: "Overview" shows correct statistics for the selected year.
 - **AC-3**: User can filter "Data Explorer" by Town and Price, and see the table and map update.
-- **AC-4**: CSV Export downloads a file with the correct filtered records.
-- **AC-5**: "Price Trends" chart correctly displays the trend line for selected flat types.
-- **AC-6**: Map markers are color-coded based on price (Green/Yellow/Red).
+- **AC-4**: Map displays markers for MRT stations and Schools when the respective layers are toggled.
+- **AC-5**: User can save a transaction to "Shortlist" and add a note.
+- **AC-6**: "Price Trends" chart correctly displays the trend line for selected flat types.
 - **AC-7**: UI is responsive and looks professional on both desktop and mobile.
